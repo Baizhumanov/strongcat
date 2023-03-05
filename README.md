@@ -245,4 +245,223 @@ export default function (array, key = "ID") {
 Папка `views` используется для хранений страницы, которые, в свою очередь, используют компоненты. Всего страниц 4:
 Страница `Home.vue` — стратовая точка страницы.
 
-Страница 
+Страница `Manage.vue` отвечает за управления упражнениями:
+```
+<li class="list-group-item" v-for="item in items" :key="item.ID">
+   <div class="d-flex align-items-center justify-content-between">
+     <div class="name">{{ item.name }}</div>
+     <div class="d-flex align-items-center justify-content-between">
+       <button class="btn btn-sm btn-warning me-md-3 me-1" @click="editExercise(item.ID)">Изменить</button>
+       <button class="btn-close" @click="deleteExercise(item.ID)"></button>
+     </div>
+   </div>
+ </li>
+```
+```
+export default {
+  ...
+  data() {
+    return {
+      items: [],
+      exerciseName: "",
+      modal: {},
+      modalType: "add",
+      currentId: 0,
+    }
+  },
+  methods: {
+    ...
+    addExercise() {
+      if (this.exerciseName.length <= 0) {
+        this.addToast("Введите название")
+        return
+      }
+      this.items.push({ID: this.items.length + 1, name: this.exerciseName})
+      this.commitItems()
+      this.modal.hide()
+      this.addToast("Упражнение успешно добавлено")
+    },
+    ...
+    saveExercise() {
+      if (this.modalType === "add") {
+        this.addExercise()
+      } else {
+        this.updateExercise()
+      }
+    },
+    deleteExercise(id) {
+      if (confirm("Вы действительно хотите удалить упражнение?")) {
+        this.items.forEach((e, i, a) => {
+          if (e.ID === id) {
+            a.splice(i, 1)
+            return
+          }
+        })
+        this.commitItems()
+      }
+    },
+    commitItems() {
+      localStorage.setItem('exercises', JSON.stringify(this.items))
+    },
+    setItems() {
+      if (localStorage.getItem('exercises') === null) {
+        return
+      }
+      let exercises = JSON.parse(localStorage.getItem('exercises'))
+      this.items = Array.isArray(exercises) ? exercises : []
+    }
+  },
+  mounted() {
+    this.setItems()
+  }
+}
+```
+Страница `Training.vue` отвечает за вывод одной тренировки. Причем тренировка должна существовать в localStorage, иначе роутер переведет страницу обратно назад. 
+Объект тренировки выглядит так:
+```
+{
+  ID: 2,
+  date: 1561516,
+  exercises: [
+    {
+      name: "Test",
+      sets: [
+        {
+          reps: 10,
+          weight: 50,
+          type: "kg",
+          ID: 4
+        }
+      ]
+    }
+  ],
+}
+```
+Сохранение данных проводится через метод `commitData`:
+```
+commitData(exercises) {
+   let trainings = JSON.parse(localStorage.getItem('trainings'))
+   let array = []
+   trainings.forEach(e => {
+     if (e.ID == this.id) {
+       e.exercises = exercises
+     }
+     array.push(e)
+   })
+   localStorage.setItem('trainings', JSON.stringify(array))
+},
+```
+Уставнока первоначальных значений (выгрузка данных с localStorage):
+```
+setData() {
+   if (localStorage.getItem('trainings') === null) {
+     return
+   }
+   let trainings = JSON.parse(localStorage.getItem('trainings'))
+   let exercises = []
+   let isExist = false
+   trainings.forEach(e => {
+     if (e.ID == this.id) {
+       exercises = e.exercises !== undefined ? e.exercises : []
+       isExist = true
+     }
+   })
+
+   // Доступ к несуществвующей тренировке (к примеру, ID 1235842)
+   if (!isExist) {
+     router.push({name: 'Trainings'})
+   }
+
+   if (exercises.length !== 0) {
+     // Обязательная проверка exercises.sets (по умолчанию ставить [])
+     exercises.forEach(e => {
+       if (Object.keys(e).includes('sets')) {
+         if (!Array.isArray(e.sets)) {
+           e.sets = []
+         }
+       }
+     })
+     this.commitData(exercises)
+   }
+   this.exercises = exercises
+},
+```
+
+Страница `Trainings.vue` отвечает за вывод всех тренировок:
+```
+<li class="list-group-item" v-for="training in trainings" :key="training.ID">
+   <div class="d-flex align-items-center justify-content-between my-2">
+     <div>{{ training.ID }}. {{ getDate(training.date) }}</div>
+     <div class="d-flex align-items-center justify-content-between">
+       <button class="btn btn-sm btn-primary me-md-3 me-1" @click="editTraining(training.ID)">Перейти</button>
+       <button class="btn-close" @click="deleteTraining(training.ID)"></button>
+     </div>
+   </div>
+</li>
+```
+Данные так же берутся с LocalStorage:
+```
+getTrainings() {
+   if (localStorage.getItem('trainings') === null) {
+     this.commitTrainings([])
+   }
+   return JSON.parse(localStorage.getItem('trainings'))
+},
+commitTrainings(trainings) {
+   localStorage.setItem('trainings', JSON.stringify(trainings))
+   this.initTrainings = this.getTrainings()
+},
+```
+
+## App.vue и main.js
+`App.vue` довольно простой, так как является корневым элементом/компонентом:
+```
+<template>
+  <Header v-if="view !== 'Home'"></Header>
+  <router-view/>
+  <Toast :initial-toasts="$store.state.toasts" />
+</template>
+
+<script>
+import Header from "@/components/Header.vue";
+
+export default {
+  components: {Header},
+  computed: {
+    view() {
+      return this.$route.name
+    }
+  }
+}
+</script>
+```
+`main.js` является настройкой и стартом приложения:
+```
+import { createApp } from 'vue'
+import App from './App.vue'
+
+import router from './router'
+import store from './store'
+import components from '@/components/UI'
+
+import 'bootstrap/dist/css/bootstrap.min.css'
+import 'bootstrap-icons/font/bootstrap-icons.css'
+import bootstrap from 'bootstrap/dist/js/bootstrap.bundle.min'
+import "bootstrap"
+window.bootstrap = bootstrap
+
+const app = createApp(App)
+
+components.forEach(component => {
+    app.component(component.name, component)
+})
+
+app.use(store)
+   .use(router)
+
+app.mount('#app')
+```
+
+## Дополнительно о будущем проекта
+Проект является расширяемым. Первое, что необходимо сделать, — это составить необходимый backend часть. Прикрутить проекту axios и брать данные через него (RestAPI). В качестве базы данных хорошо подходит MongoDB, так как данные хранятся вложенно. Помимо этого можно еще создать кучу других важных компонентов и использовать его в реальной жизни! 
+P.S. Этим проектом начал заниматься после того, когда сам столкнулся с проблемой ведения учета тренировок
